@@ -34,3 +34,54 @@ app.put('/api/kds/orders/:id/status', (req, res) => {
 });
 
 app.listen(3000, () => console.log('Bima Resto Backend berjalan di port 3000'));
+
+// Mock Database untuk Kategori & Menu
+let categories = [
+    { id: 1, name: 'Makanan Utama', description: 'Nasi, Mie, dll' },
+    { id: 2, name: 'Minuman', description: 'Es, Kopi, Jus' },
+    { id: 3, name: 'Camilan', description: 'Snack ringan' }
+];
+
+let menuItems = [
+    { id: 1, category_id: 1, name: 'Nasi Goreng Bima', price: 25000, stock: 50 },
+    { id: 2, category_id: 2, name: 'Es Teh Manis', price: 5000, stock: 100 }
+];
+
+// Endpoint 1: Mengambil semua kategori (Untuk ditampilkan di frontend)
+app.get('/api/categories', (req, res) => {
+    res.json({ success: true, data: categories });
+});
+
+// Endpoint 2: Menambahkan kategori baru (Dipanggil dari modal tambah kategori di frontend)
+app.post('/api/categories', (req, res) => {
+    const { name, description } = req.body;
+    
+    if (!name) {
+        return res.status(400).json({ success: false, message: 'Nama kategori wajib diisi' });
+    }
+
+    const newCategory = {
+        id: categories.length + 1,
+        name: name,
+        description: description || ''
+    };
+    
+    categories.push(newCategory);
+    res.status(201).json({ success: true, message: 'Kategori berhasil ditambahkan', data: newCategory });
+});
+
+// Endpoint 3: Mengambil menu berdasarkan kategori (Untuk filter di halaman utama)
+app.get('/api/menu', (req, res) => {
+    const categoryId = req.query.categoryId;
+    
+    // Jika ada query ?categoryId=1, filter datanya
+    if (categoryId) {
+        const filteredMenu = menuItems.filter(item => item.category_id === parseInt(categoryId));
+        return res.json({ success: true, data: filteredMenu });
+    }
+    
+    // Jika tidak ada query, tampilkan semua
+    res.json({ success: true, data: menuItems });
+});
+
+// ... (app.listen) ...
