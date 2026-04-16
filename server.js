@@ -1,32 +1,83 @@
 const express = require('express');
 const cors = require('cors');
+require('dotenv').config();
+const { Pool } = require('pg');
 
 const app = express();
-// Azure menggunakan process.env.PORT, jadi kita harus menyiapkannya
-const port = process.env.PORT || 8080; 
+// Menggunakan port 8080 sebagai standar tunggal
+const PORT = process.env.PORT || 8080;
 
-// Middleware
-app.use(cors()); // Mengizinkan frontend mengambil data
-app.use(express.json()); // Agar bisa menerima data format JSON
+// ==========================================
+// 1. MIDDLEWARE
+// ==========================================
+app.use(cors());
+app.use(express.json());
 
-// Endpoint 1: Cek Status Server (Halaman Utama)
+// ==========================================
+// 2. KONFIGURASI DATABASE (NEON)
+// ==========================================
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: {
+        rejectUnauthorized: false // Wajib untuk koneksi aman ke Neon
+    }
+});
+
+// Cek koneksi saat startup
+pool.connect((err, client, release) => {
+    if (err) {
+        return console.error('Gagal terhubung ke Neon DB:', err.stack);
+    }
+    console.log('Berhasil terhubung ke database Neon.');
+    release();
+});
+
+// ==========================================
+// 3. ROUTES (GABUNGAN)
+// ==========================================
+
+// GANTI rute kategori lama kamu dengan ini di server.js
+app.get('/api/kategori', async (req, res) => {
+    try {
+        // Query ini mengambil data menu dan menggabungkannya dengan nama kategorinya
+        const result = await pool.query(`
+            SELECT m.*, c.name as nama_kategori 
+            FROM menu_items m 
+            JOIN categories c ON m.category_id = c.id
+            ORDER BY m.id ASC
+        `);
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Error Database:", err.message);
+        res.status(500).send('Server Error pada Kategori: Tabel tidak ditemukan atau query salah');
+    }
+});
+
+// Tambahkan route test untuk memastikan server aktif
 app.get('/', (req, res) => {
-  res.send('Sistem Integrasi Bima Resto - Pradita University (Backend Berjalan Normal!)');
+    res.send('Bima Resto Unified Backend API is Running...');
 });
 
-// Endpoint 2: Contoh API untuk Frontend (Daftar Menu)
-app.get('/api/menu', (req, res) => {
-  res.json({
-    status: 'success',
-    data: [
-      { id: 1, nama: 'Nasi Goreng Pradita', harga: 25000 },
-      { id: 2, nama: 'Mie Godok Bima', harga: 20000 },
-      { id: 3, nama: 'Es Teh Kampus', harga: 5000 }
-    ]
-  });
+// Tambahkan rute ini agar bisa dibuka di browser
+app.get('/api/inventory/movements', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM inventory_movements ORDER BY created_at DESC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Database Error: Pastikan tabel inventory_movements sudah dibuat di Neon.');
+    }
 });
-
-// Menyalakan Server
-app.listen(port, () => {
-  console.log(`Server Bima Resto berjalan di port ${port}`);
+// ==========================================
+// 4. JALANKAN SERVER
+// ==========================================
+app.listen(PORT, () => {
+    console.log(`
+🚀 Server Terkonsolidasi Berjalan!
+----------------------------------
+Alamat: http://localhost:${PORT}
+Database: Neon Cloud (PostgreSQL)
+Endpoint Kategori: http://localhost:${PORT}/api/kategori
+Endpoint Inventory: http://localhost:${PORT}/api/inventory/movements
+    `);
 });
