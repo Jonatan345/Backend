@@ -3,7 +3,7 @@ const cors = require('cors');
 const prisma = require('./prisma/client'); // Import Prisma
 
 const app = express();
-const PORT = 8080;
+const PORT = 8080; // Menggunakan Port 8080 sesuai standarmu
 
 app.use(cors());
 app.use(express.json());
@@ -76,7 +76,7 @@ app.post('/api/menu', async (req, res) => {
   }
 });
 
-// ========== INVENTORY MOVEMENTS ENDPOINTS ==========
+// ========== INVENTORY MOVEMENTS ENDPOINTS (INTEGRATED WITH TRANSACTION) ==========
 
 // GET semua inventory movements
 app.get('/api/inventory/movements', async (req, res) => {
@@ -98,22 +98,38 @@ app.get('/api/inventory/movements', async (req, res) => {
   }
 });
 
-// POST inventory movement baru
+/** * LOGIKA KRUSIAL: Setiap mencatat pergerakan, stok di menuItem WAJIB berubah.
+ * Menggunakan $transaction untuk menjamin integritas data di Bima Resto.
+ */
 app.post('/api/inventory/movements', async (req, res) => {
   const { menuItemId, quantityChange, movementType, reason } = req.body;
+  
   try {
-    const movement = await prisma.inventoryMovement.create({
-      data: {
-        menuItemId,
-        quantityChange,
-        movementType,
-        reason
-      }
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Catat histori pergerakan di tabel inventoryMovement
+      const movement = await tx.inventoryMovement.create({
+        data: { menuItemId, quantityChange, movementType, reason }
+      });
+
+      // 2. Update stok secara otomatis di tabel menuItem
+      // increment akan otomatis mengurangi stok jika quantityChange bernilai negatif
+      await tx.menuItem.update({
+        where: { id: menuItemId },
+        data: {
+          stock: {
+            increment: quantityChange 
+          }
+        }
+      });
+
+      return movement;
     });
-    res.status(201).json(movement);
+
+    res.status(201).json(result);
   } catch (err) {
-    console.error('Error:', err.message);
-    res.status(500).send('Gagal mencatat movement');
+    console.error('Error Inventory:', err.message);
+    // Menampilkan detail error agar kamu mudah menelusuri di VS Code
+    res.status(500).send('Gagal memperbarui stok: ' + err.message);
   }
 });
 
@@ -127,8 +143,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server Terkonsolidasi Berjalan!`);
   console.log(`Alamat: http://localhost:${PORT}`);
   console.log(`Database: Neon Cloud (PostgreSQL)`);
-  console.log(`Endpoint Kategori: http://localhost:${PORT}/api/kategori`);
-  console.log(`Endpoint Menu: http://localhost:${PORT}/api/menu`);
   console.log(`Endpoint Inventory: http://localhost:${PORT}/api/inventory/movements`);
-  console.log(`\nBerhasil terhubung ke database Neon.`);
 });
