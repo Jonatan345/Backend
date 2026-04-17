@@ -1,83 +1,147 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
-const { Pool } = require('pg');
+const prisma = require('./prisma/client'); // Import Prisma
 
 const app = express();
-// Menggunakan port 8080 sebagai standar tunggal
-const PORT = process.env.PORT || 8080;
+const PORT = 8080; // Menggunakan Port 8080 sesuai standarmu
 
-// ==========================================
-// 1. MIDDLEWARE
-// ==========================================
 app.use(cors());
 app.use(express.json());
 
-// ==========================================
-// 2. KONFIGURASI DATABASE (NEON)
-// ==========================================
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: {
-        rejectUnauthorized: false // Wajib untuk koneksi aman ke Neon
-    }
-});
+// ========== KATEGORI ENDPOINTS ==========
 
-// Cek koneksi saat startup
-pool.connect((err, client, release) => {
-    if (err) {
-        return console.error('Gagal terhubung ke Neon DB:', err.stack);
-    }
-    console.log('Berhasil terhubung ke database Neon.');
-    release();
-});
-
-// ==========================================
-// 3. ROUTES (GABUNGAN)
-// ==========================================
-
-// GANTI rute kategori lama kamu dengan ini di server.js
+// GET semua kategori
 app.get('/api/kategori', async (req, res) => {
-    try {
-        // Query ini mengambil data menu dan menggabungkannya dengan nama kategorinya
-        const result = await pool.query(`
-            SELECT m.*, c.name as nama_kategori 
-            FROM menu_items m 
-            JOIN categories c ON m.category_id = c.id
-            ORDER BY m.id ASC
-        `);
-        res.json(result.rows);
-    } catch (err) {
-        console.error("Error Database:", err.message);
-        res.status(500).send('Server Error pada Kategori: Tabel tidak ditemukan atau query salah');
-    }
+  try {
+    const categories = await prisma.category.findMany({
+      orderBy: { id: 'asc' }
+    });
+    res.json(categories);
+  } catch (err) {
+    console.error('Error Database:', err.message);
+    res.status(500).send('Server Error pada Kategori: ' + err.message);
+  }
 });
 
-// Tambahkan route test untuk memastikan server aktif
-app.get('/', (req, res) => {
-    res.send('Bima Resto Unified Backend API is Running...');
+// POST kategori baru
+app.post('/api/kategori', async (req, res) => {
+  const { name } = req.body;
+  try {
+    const newCategory = await prisma.category.create({
+      data: { name }
+    });
+    res.status(201).json(newCategory);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Gagal menambah kategori');
+  }
 });
 
-// Tambahkan rute ini agar bisa dibuka di browser
+// ========== MENU ITEMS ENDPOINTS ==========
+
+// GET semua menu items dengan kategori
+app.get('/api/menu', async (req, res) => {
+  try {
+    const menuItems = await prisma.menuItem.findMany({
+      include: {
+        category: true // Include kategori relation
+      },
+      orderBy: { id: 'asc' }
+    });
+    res.json(menuItems);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Server Error pada Menu');
+  }
+});
+
+// POST menu item baru
+app.post('/api/menu', async (req, res) => {
+  const { categoryId, name, price, stock, estimatedTime, status } = req.body;
+  try {
+    const newMenuItem = await prisma.menuItem.create({
+      data: {
+        categoryId,
+        name,
+        price,
+        stock,
+        estimatedTime,
+        status
+      }
+    });
+    res.status(201).json(newMenuItem);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Gagal menambah menu item');
+  }
+});
+
+// ========== INVENTORY MOVEMENTS ENDPOINTS (INTEGRATED WITH TRANSACTION) ==========
+
+// GET semua inventory movements
 app.get('/api/inventory/movements', async (req, res) => {
-    try {
-        const result = await pool.query('SELECT * FROM inventory_movements ORDER BY created_at DESC');
-        res.json(result.rows);
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Database Error: Pastikan tabel inventory_movements sudah dibuat di Neon.');
-    }
+  try {
+    const movements = await prisma.inventoryMovement.findMany({
+      include: {
+        menuItem: {
+          include: {
+            category: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(movements);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Server Error pada Inventory Movements');
+  }
 });
-// ==========================================
-// 4. JALANKAN SERVER
-// ==========================================
+
+/** * LOGIKA KRUSIAL: Setiap mencatat pergerakan, stok di menuItem WAJIB berubah.
+ * Menggunakan $transaction untuk menjamin integritas data di Bima Resto.
+ */
+app.post('/api/inventory/movements', async (req, res) => {
+  const { menuItemId, quantityChange, movementType, reason } = req.body;
+  
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. Catat histori pergerakan di tabel inventoryMovement
+      const movement = await tx.inventoryMovement.create({
+        data: { menuItemId, quantityChange, movementType, reason }
+      });
+
+      // 2. Update stok secara otomatis di tabel menuItem
+      // increment akan otomatis mengurangi stok jika quantityChange bernilai negatif
+      await tx.menuItem.update({
+        where: { id: menuItemId },
+        data: {
+          stock: {
+            increment: quantityChange 
+          }
+        }
+      });
+
+      return movement;
+    });
+
+    res.status(201).json(result);
+  } catch (err) {
+    console.error('Error Inventory:', err.message);
+    // Menampilkan detail error agar kamu mudah menelusuri di VS Code
+    res.status(500).send('Gagal memperbarui stok: ' + err.message);
+  }
+});
+
+// ========== ROOT ENDPOINT ==========
+app.get('/', (req, res) => {
+  res.send('Bima Resto Unified Backend API is Running...');
+});
+
+// Start server
 app.listen(PORT, () => {
-    console.log(`
-🚀 Server Terkonsolidasi Berjalan!
-----------------------------------
-Alamat: http://localhost:${PORT}
-Database: Neon Cloud (PostgreSQL)
-Endpoint Kategori: http://localhost:${PORT}/api/kategori
-Endpoint Inventory: http://localhost:${PORT}/api/inventory/movements
-    `);
+  console.log(`🚀 Server Terkonsolidasi Berjalan!`);
+  console.log(`Alamat: http://localhost:${PORT}`);
+  console.log(`Database: Neon Cloud (PostgreSQL)`);
+  console.log(`Endpoint Inventory: http://localhost:${PORT}/api/inventory/movements`);
 });
