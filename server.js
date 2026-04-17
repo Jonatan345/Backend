@@ -1,54 +1,134 @@
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg'); // <-- INI DIA YANG HILANG! Pemanggil alat 'Pool'
-require('dotenv').config();
+const prisma = require('./prisma/client'); // Import Prisma
 
 const app = express();
-const port = process.env.PORT || 8080;
+const PORT = 8080;
 
-// Middleware
 app.use(cors());
 app.use(express.json());
 
-// Konfigurasi Koneksi Neon Cloud Database
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false // Wajib untuk Neon
+// ========== KATEGORI ENDPOINTS ==========
+
+// GET semua kategori
+app.get('/api/kategori', async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      orderBy: { id: 'asc' }
+    });
+    res.json(categories);
+  } catch (err) {
+    console.error('Error Database:', err.message);
+    res.status(500).send('Server Error pada Kategori: ' + err.message);
   }
 });
 
-// Cek Koneksi Database
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('Yah, Gagal terhubung ke database:', err.stack);
-  } else {
-    console.log('Mantap! Berhasil terhubung ke database PostgreSQL (Neon) Bima Resto!');
+// POST kategori baru
+app.post('/api/kategori', async (req, res) => {
+  const { name } = req.body;
+  try {
+    const newCategory = await prisma.category.create({
+      data: { name }
+    });
+    res.status(201).json(newCategory);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Gagal menambah kategori');
   }
-  if (release) release();
 });
 
-// Endpoint Utama
-app.get('/', (req, res) => {
-  res.send('Sistem Integrasi Bima Resto - Pradita University (Backend & Database Active!)');
-});
+// ========== MENU ITEMS ENDPOINTS ==========
 
-// API Endpoint: Mengambil semua data Menu
+// GET semua menu items dengan kategori
 app.get('/api/menu', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM menus ORDER BY id ASC');
-    res.json({
-      status: 'success',
-      total_data: result.rowCount,
-      data: result.rows
+    const menuItems = await prisma.menuItem.findMany({
+      include: {
+        category: true // Include kategori relation
+      },
+      orderBy: { id: 'asc' }
     });
+    res.json(menuItems);
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ status: 'error', message: 'Terjadi kesalahan pada server' });
+    console.error('Error:', err.message);
+    res.status(500).send('Server Error pada Menu');
   }
 });
 
-// Menyalakan Server
-app.listen(port, () => {
-  console.log(`Server Backend Bima Resto berjalan di http://localhost:${port}`);
+// POST menu item baru
+app.post('/api/menu', async (req, res) => {
+  const { categoryId, name, price, stock, estimatedTime, status } = req.body;
+  try {
+    const newMenuItem = await prisma.menuItem.create({
+      data: {
+        categoryId,
+        name,
+        price,
+        stock,
+        estimatedTime,
+        status
+      }
+    });
+    res.status(201).json(newMenuItem);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Gagal menambah menu item');
+  }
+});
+
+// ========== INVENTORY MOVEMENTS ENDPOINTS ==========
+
+// GET semua inventory movements
+app.get('/api/inventory/movements', async (req, res) => {
+  try {
+    const movements = await prisma.inventoryMovement.findMany({
+      include: {
+        menuItem: {
+          include: {
+            category: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(movements);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Server Error pada Inventory Movements');
+  }
+});
+
+// POST inventory movement baru
+app.post('/api/inventory/movements', async (req, res) => {
+  const { menuItemId, quantityChange, movementType, reason } = req.body;
+  try {
+    const movement = await prisma.inventoryMovement.create({
+      data: {
+        menuItemId,
+        quantityChange,
+        movementType,
+        reason
+      }
+    });
+    res.status(201).json(movement);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Gagal mencatat movement');
+  }
+});
+
+// ========== ROOT ENDPOINT ==========
+app.get('/', (req, res) => {
+  res.send('Bima Resto Unified Backend API is Running...');
+});
+
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Server Terkonsolidasi Berjalan!`);
+  console.log(`Alamat: http://localhost:${PORT}`);
+  console.log(`Database: Neon Cloud (PostgreSQL)`);
+  console.log(`Endpoint Kategori: http://localhost:${PORT}/api/kategori`);
+  console.log(`Endpoint Menu: http://localhost:${PORT}/api/menu`);
+  console.log(`Endpoint Inventory: http://localhost:${PORT}/api/inventory/movements`);
+  console.log(`\nBerhasil terhubung ke database Neon.`);
 });
