@@ -21,3 +21,7 @@ Pastikan komputer Anda sudah terinstal:
    ```bash
    git clone <https://github.com/Jonatan345/Backend>
    cd "Sistem Integrasi Bima Resto Capstone Project - Backend"
+2. **Ketik di terminal VSCode**
+   ```bash
+   npm run
+   node server.js
