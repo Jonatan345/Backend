@@ -16,7 +16,7 @@ CREATE TABLE menu_items (
     name VARCHAR(150) NOT NULL,
     price DECIMAL(10, 2) NOT NULL,
     stock INT DEFAULT 0,
-    estimated_time INTERVAL, 
+    estimated_time VARCHAR(20) NOT NULL, 
     status VARCHAR(50) DEFAULT 'Uncooked',
     CONSTRAINT fk_category 
         FOREIGN KEY (category_id) 
