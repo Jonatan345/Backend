@@ -1,9 +1,9 @@
 const express = require('express');
 const cors = require('cors');
-const prisma = require('./prisma/client'); // Import Prisma
+const prisma = require('./prisma/client'); // ✅ Path benar: prisma/client.js
 
 const app = express();
-const PORT = 8080; // Menggunakan Port 8080 sesuai standarmu
+const PORT = 8080;
 
 app.use(cors());
 app.use(express.json());
@@ -44,7 +44,7 @@ app.get('/api/menu', async (req, res) => {
   try {
     const menuItems = await prisma.menuItem.findMany({
       include: {
-        category: true // Include kategori relation
+        category: true
       },
       orderBy: { id: 'asc' }
     });
@@ -76,7 +76,7 @@ app.post('/api/menu', async (req, res) => {
   }
 });
 
-// ========== INVENTORY MOVEMENTS ENDPOINTS (INTEGRATED WITH TRANSACTION) ==========
+// ========== INVENTORY MOVEMENTS ENDPOINTS ==========
 
 // GET semua inventory movements
 app.get('/api/inventory/movements', async (req, res) => {
@@ -98,26 +98,21 @@ app.get('/api/inventory/movements', async (req, res) => {
   }
 });
 
-/** * LOGIKA KRUSIAL: Setiap mencatat pergerakan, stok di menuItem WAJIB berubah.
- * Menggunakan $transaction untuk menjamin integritas data di Bima Resto.
- */
+// POST inventory movement + auto update stok (pakai transaction)
 app.post('/api/inventory/movements', async (req, res) => {
   const { menuItemId, quantityChange, movementType, reason } = req.body;
   
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Catat histori pergerakan di tabel inventoryMovement
       const movement = await tx.inventoryMovement.create({
         data: { menuItemId, quantityChange, movementType, reason }
       });
 
-      // 2. Update stok secara otomatis di tabel menuItem
-      // increment akan otomatis mengurangi stok jika quantityChange bernilai negatif
       await tx.menuItem.update({
         where: { id: menuItemId },
         data: {
           stock: {
-            increment: quantityChange 
+            increment: quantityChange
           }
         }
       });
@@ -128,7 +123,6 @@ app.post('/api/inventory/movements', async (req, res) => {
     res.status(201).json(result);
   } catch (err) {
     console.error('Error Inventory:', err.message);
-    // Menampilkan detail error agar kamu mudah menelusuri di VS Code
     res.status(500).send('Gagal memperbarui stok: ' + err.message);
   }
 });
