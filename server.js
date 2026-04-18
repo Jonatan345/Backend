@@ -34,12 +34,14 @@ const authenticateToken = (req, res, next) => {
 // POST /api/auth/login
 app.post('/api/auth/login', async (req, res) => {
   const { username, password } = req.body;
+  console.log('🔐 Login attempt:', username);
 
   try {
     // Cari user berdasarkan username
     const user = await prisma.user.findUnique({
       where: { username }
     });
+    console.log('DB query result:', !!user);
 
     if (!user) {
       return res.status(401).json({ error: 'Invalid username or password' });
@@ -73,7 +75,11 @@ app.post('/api/auth/login', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error('Login error:', err.message);
+    console.error('💥 Login ERROR details:', {
+      code: err.code,
+      message: err.message,
+      stack: err.stack?.split('\\n')[0]
+    });
     res.status(500).json({ error: 'Server error during login' });
   }
 });
