@@ -6,7 +6,22 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+// Model Users
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique @db.VarChar(50)
+  email     String   @unique @db.VarChar(100)
+  password  String   @db.VarChar(255)
+  role      String   @default("staff") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  resetToken     String?         @db.VarChar(500) @map("reset_token")
+  resetTokenExpiry DateTime?     @map("reset_token_expiry")
+
+  @@map("users")
+
 }
 
 // Model Categories
