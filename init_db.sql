@@ -2,8 +2,24 @@
 DROP TABLE IF EXISTS inventory_movements CASCADE;
 DROP TABLE IF EXISTS menu_items CASCADE;
 DROP TABLE IF EXISTS categories CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
 
--- 2. Create Categories Table
+-- 2. Create Users Table
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) DEFAULT 'staff',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Add reset columns if not exists (for forgot password)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(500);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expiry TIMESTAMP;
+
+-- 3. Create Categories Table
 CREATE TABLE categories (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE
@@ -38,22 +54,47 @@ CREATE TABLE inventory_movements (
         ON DELETE CASCADE
 );
 
--- 5. Insert Sample Data - Categories
-INSERT INTO categories (name) VALUES 
-('Makanan'), 
-('Minuman'),
-('Dessert');
+-- 5. Insert Sample Data - Users
+INSERT INTO users (username, email, password, role) VALUES
+('admin', 'admin@bimaresto.com', '$2b$10$8K3.5Q8X9Y2Z4W6E8R0T2U4I6O8P0A2S4D6F8G0H2J4K6L8N0P2R', 'admin'),
+('manager', 'manager@bimaresto.com', '$2b$10$8K3.5Q8X9Y2Z4W6E8R0T2U4I6O8P0A2S4D6F8G0H2J4K6L8N0P2R', 'manager'),
+('staff', 'staff@bimaresto.com', '$2b$10$8K3.5Q8X9Y2Z4W6E8R0T2U4I6O8P0A2S4D6F8G0H2J4K6L8N0P2R', 'staff');
 
--- 6. Insert Sample Data - Menu Items
+-- 6. Insert Sample Data - Categories
+INSERT INTO categories (name) VALUES
+('Makanan'),
+('Minuman'),
+('Dessert'),
+('Fresh Ingredients (Meat)'),
+('Fresh Ingredients (Poultry)'),
+('Fresh Ingredients (Vegetables)'),
+('Fresh Ingredients (Fruit)'),
+('Fresh Ingredients (Seafood)'),
+('Dry Ingredients'),
+('Bottle'),
+('Pastry');
+
+-- 7. Insert Sample Data - Menu Items
 INSERT INTO menu_items (category_id, name, price, stock, estimated_time, status) VALUES
 (1, 'Nasi Goreng Bima', 25000, 50, '00:05:00', 'Uncooked'),
 (1, 'Ayam Bakar', 35000, 40, '00:15:00', 'Processed'),
 (1, 'Mie Goreng', 22000, 30, '00:07:00', 'Uncooked'),
 (2, 'Es Teh Manis', 5000, 100, '00:02:00', 'Uncooked'),
 (2, 'Jus Alpukat', 15000, 25, '00:05:00', 'Uncooked'),
-(3, 'Es Krim Vanilla', 12000, 20, '00:01:00', 'Uncooked');
+(3, 'Es Krim Vanilla', 12000, 20, '00:01:00', 'Uncooked'),
+(4, 'Daging Sapi Sirloin', 120000, 15, '00:00:00', 'Available'),
+(5, 'Daging Ayam Fillet', 70000, 8, '00:00:00', 'Available'),
+(5, 'Telur Ayam', 60000, 50, '00:00:00', 'Available'),
+(6, 'Sayur Kol', 12000, 20, '00:00:00', 'Available'),
+(7, 'Alpukat', 20000, 18, '00:00:00', 'Available'),
+(8, 'Udang Segar', 90000, 10, '00:00:00', 'Available'),
+(9, 'Beras Pandan Wangi', 12000, 100, '00:00:00', 'Available'),
+(9, 'Gula Pasir', 10000, 50, '00:00:00', 'Available'),
+(9, 'Kecap Manis', 25000, 40, '00:00:00', 'Available'),
+(10, 'Minyak Goreng', 25000, 20, '00:00:00', 'Available'),
+(11, 'Croissant', 18000, 30, '00:00:00', 'Available');
 
--- 7. Insert Sample Data - Inventory Movements
+-- 8. Insert Sample Data - Inventory Movements
 INSERT INTO inventory_movements (menu_item_id, quantity_change, movement_type, reason) VALUES
 (1, 50, 'IN', 'Initial stock - Nasi Goreng Bima'),
 (2, 40, 'IN', 'Initial stock - Ayam Bakar'),
@@ -61,5 +102,14 @@ INSERT INTO inventory_movements (menu_item_id, quantity_change, movement_type, r
 (4, 100, 'IN', 'Initial stock - Es Teh Manis'),
 (5, 25, 'IN', 'Initial stock - Jus Alpukat'),
 (6, 20, 'IN', 'Initial stock - Es Krim Vanilla'),
-(1, -5, 'SALE', 'Sold 5 portions'),
-(2, -3, 'SALE', 'Sold 3 portions');
+(7, 15, 'IN', 'Initial stock - Daging Sapi Sirloin'),
+(8, 8, 'IN', 'Initial stock - Daging Ayam Fillet'),
+(9, 50, 'IN', 'Initial stock - Telur Ayam'),
+(10, 20, 'IN', 'Initial stock - Sayur Kol'),
+(11, 18, 'IN', 'Initial stock - Alpukat'),
+(12, 10, 'IN', 'Initial stock - Udang Segar'),
+(13, 100, 'IN', 'Initial stock - Beras Pandan Wangi'),
+(14, 50, 'IN', 'Initial stock - Gula Pasir'),
+(15, 40, 'IN', 'Initial stock - Kecap Manis'),
+(16, 20, 'IN', 'Initial stock - Minyak Goreng'),
+(17, 30, 'IN', 'Initial stock - Croissant');
