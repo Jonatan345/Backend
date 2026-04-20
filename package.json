@@ -1,26 +1,17 @@
 {
-  "name": "bima-resto-backend",
-  "version": "1.0.0",
-  "description": "Backend System untuk Integrasi Bima Resto - Pradita University",
-  "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "dependencies": {
-    "@prisma/adapter-neon": "^5.9.0",
-    "@prisma/client": "^5.20.1",
-    "bcryptjs": "^2.4.3",
-    "cors": "^2.8.5",
-    "dotenv": "^17.4.2",
-    "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2",
-    "node-fetch": "^2.7.0",
-    "pg": "^8.20.0",
-    "ws": "^8.20.0"
-  },
-  "devDependencies": {
-    "@types/node": "^25.6.0",
-    "prisma": "^5.20.1"
-  }
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Launch Program",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}\\server.js"
+        }
+    ]
 }
