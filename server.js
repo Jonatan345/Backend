@@ -8,6 +8,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const prisma = new PrismaClient();
 
 neonConfig.webSocketConstructor = ws;
 
@@ -872,6 +873,73 @@ function getUnitForItem(name) {
   if (n.includes('teh') || n.includes('jus')) return 'Liter';
   return 'kg';
 }
+
+// LOGIN ENDPOINT - FIXED
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    console.log('Login attempt:', { username, password }); // Debug log
+
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username and password required' });
+    }
+
+    // Find user in database
+    const user = await prisma.user.findUnique({
+      where: { username },
+    });
+
+    console.log('User found:', user); // Debug log
+
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
+
+    // Check password - support both hashed and plain text for development
+    let isValidPassword = false;
+    
+    // Try bcrypt compare first (if password is hashed)
+    try {
+      isValidPassword = await bcrypt.compare(password, user.password);
+    } catch (e) {
+      // If bcrypt fails, try plain text comparison (for development)
+      isValidPassword = (password === user.password);
+    }
+
+    console.log('Password valid:', isValidPassword); // Debug log
+
+    if (!isValidPassword) {
+      return res.status(401).json({ message: 'Invalid username or password' });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { 
+        userId: user.id, 
+        username: user.username,
+        role: user.role 
+      },
+      process.env.JWT_SECRET || 'your-secret-key-change-this',
+      { expiresIn: '24h' }
+    );
+
+    // Return success
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.name || user.username,
+        role: user.role || 'Admin',
+      }
+    });
+
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error during login' });
+  }
+});
 
 // Start server
 app.listen(PORT, () => {
