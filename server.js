@@ -1,16 +1,20 @@
 require('dotenv').config();
 const { PrismaNeon } = require('@prisma/adapter-neon');
 const { PrismaClient } = require('@prisma/client');
+const { Pool } = require('@neondatabase/serverless');
+const { neonConfig } = require('@neondatabase/serverless');
+const ws = require('ws');
 const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
-const neon = new PrismaNeon({
-  connectionString: process.env.DATABASE_URL
-});
+neonConfig.webSocketConstructor = ws;
 
-const prisma = new PrismaClient({ adapter: neon });
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const adapter = new PrismaNeon(pool);
+
+const prisma = new PrismaClient({ adapter });
 
 const app = express();
 const PORT = 8080;
@@ -362,6 +366,55 @@ app.post('/api/inventory/movements', async (req, res) => {
   }
 });
 
+// ========== SUPPLIER MANAGEMENT ENDPOINTS ==========
+
+app.get('/api/suppliers', authenticateToken, async (req, res) => {
+  try {
+    const suppliers = await prisma.supplier.findMany({ orderBy: { createdAt: 'desc' } });
+    const suppliersWithStats = await Promise.all(suppliers.map(async (supplier) => {
+      const transactions = await prisma.supplierTransaction.findMany({ where: { supplierId: supplier.id } });
+      return { ...supplier, totalTransactions: transactions.length, totalAmount: transactions.reduce((s,t) => s + Number(t.amount), 0) };
+    }));
+    res.json(suppliersWithStats);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/suppliers', authenticateToken, async (req, res) => {
+  const { name, companyName, category, phone, email, address, city, status } = req.body;
+  try {
+    const newSupplier = await prisma.supplier.create({ data: { name, companyName, category, phone, email, address: address || '', city: city || '', status: status || 'Aktif' } });
+    res.status(201).json(newSupplier);
+  } catch (err) { res.status(500).json({ error: 'Gagal menambah supplier' }); }
+});
+
+// ========== SUPPLIER TRANSACTIONS ENDPOINTS ==========
+
+app.get('/api/suppliers/transactions/all', authenticateToken, async (req, res) => {
+  try {
+    const transactions = await prisma.supplierTransaction.findMany({ include: { supplier: { select: { name: true, companyName: true } }, menuItem: { select: { name: true } } }, orderBy: { transactionDate: 'desc' } });
+    res.json(transactions);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/suppliers/transactions/create', authenticateToken, async (req, res) => {
+  const { supplierId, menuItemId, transactionType, quantity, amount, status = 'Pending', notes } = req.body;
+  try {
+    const transaction = await prisma.supplierTransaction.create({ data: { supplierId: parseInt(supplierId), menuItemId: menuItemId ? parseInt(menuItemId) : null, transactionType, quantity: parseInt(quantity), amount: parseFloat(amount), status, notes: notes || null } });
+    res.status(201).json(transaction);
+  } catch (err) { res.status(500).json({ error: 'Gagal membuat transaksi' }); }
+});
+
+// ========== DASHBOARD STATS ==========
+
+app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
+  try {
+    const totalSuppliers = await prisma.supplier.count();
+    const totalTransactions = await prisma.supplierTransaction.count();
+    const totalAmount = await prisma.supplierTransaction.aggregate({ _sum: { amount: true }, where: { status: 'Completed' } });
+    res.json({ totalSuppliers, totalTransactions, totalAmount: totalAmount._sum.amount || 0 });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ========== ROOT ENDPOINT ==========
 app.get('/', (req, res) => {
   res.send('Bima Resto Unified Backend API is Running...');
@@ -373,4 +426,7 @@ app.listen(PORT, () => {
   console.log(`Alamat: http://localhost:${PORT}`);
   console.log(`Database: Neon Cloud (PostgreSQL)`);
   console.log(`Endpoint Inventory: http://localhost:${PORT}/api/inventory/movements`);
+  console.log(`Endpoint Suppliers: http://localhost:${PORT}/api/suppliers`);
+  console.log(`Endpoint Supplier Transactions: http://localhost:${PORT}/api/suppliers/transactions/all`);
+  console.log(`Endpoint Dashboard Stats: http://localhost:${PORT}/api/dashboard/stats`);
 });
