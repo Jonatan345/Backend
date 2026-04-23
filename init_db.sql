@@ -3,7 +3,9 @@ DROP TABLE IF EXISTS inventory_movements CASCADE;
 DROP TABLE IF EXISTS menu_items CASCADE;
 DROP TABLE IF EXISTS categories CASCADE;
 DROP TABLE IF EXISTS users CASCADE;
-
+DROP TABLE IF EXISTS supplier_transactions CASCADE;
+DROP TABLE IF EXISTS suppliers CASCADE;
+-- (tetap ada inventory_movements, menu_items, categories, users)
 -- 2. Create Users Table
 CREATE TABLE users (
     id SERIAL PRIMARY KEY,
@@ -52,6 +54,35 @@ CREATE TABLE inventory_movements (
         FOREIGN KEY (menu_item_id) 
         REFERENCES menu_items(id) 
         ON DELETE CASCADE
+);
+
+CREATE TABLE suppliers (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    company_name VARCHAR(150) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    phone VARCHAR(20) NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    address TEXT,
+    city VARCHAR(100),
+    status VARCHAR(20) DEFAULT 'Aktif',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE supplier_transactions (
+    id SERIAL PRIMARY KEY,
+    supplier_id INT NOT NULL,
+    menu_item_id INT,
+    transaction_type VARCHAR(50) NOT NULL,
+    quantity INT NOT NULL,
+    amount DECIMAL(15, 2) NOT NULL,
+    transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status VARCHAR(20) DEFAULT 'Pending',
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_supplier FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+    CONSTRAINT fk_menu_item_transaction FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL
 );
 
 -- 5. Insert Sample Data - Users
@@ -113,3 +144,15 @@ INSERT INTO inventory_movements (menu_item_id, quantity_change, movement_type, r
 (15, 40, 'IN', 'Initial stock - Kecap Manis'),
 (16, 20, 'IN', 'Initial stock - Minyak Goreng'),
 (17, 30, 'IN', 'Initial stock - Croissant');
+
+INSERT INTO suppliers (name, company_name, category, phone, email, address, city, status) VALUES
+('Budi', 'PT Sumber Makmur', 'Sayuran & Buah', '0812-3456-7890', 'budi@sumbermakmur.co.id', 'Jl. Industri No. 45', 'Bandung', 'Aktif'),
+('Eko', 'CV Berkah Abadi', 'Daging & Seafood', '0856-6878-5432', 'eko@berkah.com', 'Jl. Merdeka No. 78', 'Jakarta', 'Aktif'),
+('Ahmad', 'UD Mitra Sejati', 'Bumbu & Rempah', '0878-1234-5678', 'ahmad@mitraseajti.id', 'Jl. Nusantara No. 23', 'Surabaya', 'Nonaktif'),
+('Dewan', 'PT Kamasian Prima', 'Kemasan & Alat', '0821-5555-6666', 'dev@kamasianprima.co.id', 'Jl. Industri Barat No. 12', 'Medan', 'Aktif');
+
+INSERT INTO supplier_transactions (supplier_id, menu_item_id, transaction_type, quantity, amount, status, notes) VALUES
+(1, 10, 'Pembelian', 45, 18500000, 'Completed', 'Sayuran segar minggu ke-1'),
+(2, 7, 'Pembelian', 32, 62300000, 'Completed', 'Daging berkualitas premium'),
+(3, 15, 'Pembelian', 18, 7650000, 'Completed', 'Bumbu lengkap untuk resep'),
+(4, 16, 'Pembelian', 27, 9200000, 'Pending', 'Kemasan plastik food grade');
