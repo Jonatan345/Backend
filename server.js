@@ -246,33 +246,143 @@ app.post('/api/auth/reset-password', async (req, res) => {
   }
 });
 
-// ========== KATEGORI ENDPOINTS ==========
+// ========== KATEGORI ENDPOINTS (FULL CRUD) ==========
 
+// Helper: tentukan badge type dari nama kategori
+function getBadgeFromName(name) {
+  const n = name.toLowerCase();
+  if (n.includes('fresh') || n.includes('meat') || n.includes('poultry') || n.includes('vegetable') || n.includes('fruit') || n.includes('seafood')) {
+    return 'FRESH INGREDIENTS';
+  }
+  if (n.includes('dry')) return 'DRY INGREDIENTS';
+  if (n.includes('bottle') || n.includes('can')) return 'BOTTLE/CAN';
+  if (n.includes('pastry')) return 'PASTRY';
+  return 'GENERAL';
+}
 
-// GET semua kategori
+// GET semua kategori + statistik item
 app.get('/api/kategori', authenticateToken, async (req, res) => {
   try {
     const categories = await prisma.category.findMany({
-      orderBy: { id: 'asc' }
+      orderBy: { id: 'asc' },
+      include: {
+        menuItems: {
+          select: { id: true, stock: true, status: true }
+        }
+      }
     });
-    res.json(categories);
+
+    // Hitung statistik per kategori
+    const categoriesWithStats = categories.map(cat => {
+      const totalItems = cat.menuItems.length;
+      const lowStock = cat.menuItems.filter(m => m.stock <= 5).length;
+      const available = cat.menuItems.filter(m => m.stock > 5).length;
+      
+      return {
+        ...cat,
+        totalItems,
+        lowStock,
+        available,
+        badge: getBadgeFromName(cat.name)
+      };
+    });
+
+    res.json(categoriesWithStats);
   } catch (err) {
     console.error('Error Database:', err.message);
     res.status(500).send('Server Error pada Kategori: ' + err.message);
   }
 });
 
+// GET kategori by ID
+app.get('/api/kategori/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const category = await prisma.category.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        menuItems: {
+          select: { id: true, name: true, stock: true, status: true }
+        }
+      }
+    });
+
+    if (!category) {
+      return res.status(404).json({ error: 'Kategori tidak ditemukan' });
+    }
+
+    res.json(category);
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).send('Server Error');
+  }
+});
+
 // POST kategori baru
 app.post('/api/kategori', authenticateToken, async (req, res) => {
   const { name } = req.body;
+  if (!name || name.trim() === '') {
+    return res.status(400).json({ error: 'Nama kategori wajib diisi' });
+  }
+
   try {
     const newCategory = await prisma.category.create({
-      data: { name }
+      data: { name: name.trim() }
     });
     res.status(201).json(newCategory);
   } catch (err) {
     console.error('Error:', err.message);
+    if (err.code === 'P2002') {
+      return res.status(400).json({ error: 'Nama kategori sudah ada' });
+    }
     res.status(500).send('Gagal menambah kategori');
+  }
+});
+
+// PUT update kategori
+app.put('/api/kategori/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const { name } = req.body;
+
+  if (!name || name.trim() === '') {
+    return res.status(400).json({ error: 'Nama kategori wajib diisi' });
+  }
+
+  try {
+    const updatedCategory = await prisma.category.update({
+      where: { id: parseInt(id) },
+      data: { name: name.trim() }
+    });
+    res.json(updatedCategory);
+  } catch (err) {
+    console.error('Error:', err.message);
+    if (err.code === 'P2025') {
+      return res.status(404).json({ error: 'Kategori tidak ditemukan' });
+    }
+    if (err.code === 'P2002') {
+      return res.status(400).json({ error: 'Nama kategori sudah ada' });
+    }
+    res.status(500).send('Gagal mengupdate kategori');
+  }
+});
+
+// DELETE kategori
+app.delete('/api/kategori/:id', authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  try {
+    await prisma.category.delete({
+      where: { id: parseInt(id) }
+    });
+    res.json({ message: 'Kategori berhasil dihapus' });
+  } catch (err) {
+    console.error('Error:', err.message);
+    if (err.code === 'P2025') {
+      return res.status(404).json({ error: 'Kategori tidak ditemukan' });
+    }
+    if (err.code === 'P2003') {
+      return res.status(400).json({ error: 'Tidak dapat menghapus kategori yang memiliki menu items' });
+    }
+    res.status(500).send('Gagal menghapus kategori');
   }
 });
 
