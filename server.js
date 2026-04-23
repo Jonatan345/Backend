@@ -429,6 +429,71 @@ app.delete('/api/kategori/:id', authenticateToken, async (req, res) => {
 
 // ========== MENU ITEMS ENDPOINTS ==========
 
+// GET semua kategori + statistik item (dengan threshold dinamis)
+app.get('/api/kategori', authenticateToken, async (req, res) => {
+  try {
+    const categories = await prisma.category.findMany({
+      orderBy: { id: 'asc' },
+      include: {
+        menuItems: {
+          select: { 
+            id: true, 
+            name: true,
+            stock: true, 
+            status: true,
+            price: true,
+            estimatedTime: true
+          }
+        }
+      }
+    });
+
+    // Pastikan selalu return array, bahkan jika kosong
+    if (!Array.isArray(categories)) {
+      return res.json([]);
+    }
+
+    // Hitung statistik per kategori dengan threshold yang sesuai
+    const categoriesWithStats = categories.map(cat => {
+      const threshold = getLowStockThreshold(cat.name);
+      const menuItems = cat.menuItems || []; // fallback jika undefined
+      const totalItems = menuItems.length;
+      
+      // Hitung low stock berdasarkan threshold per kategori
+      const lowStock = menuItems.filter(m => (m.stock || 0) <= threshold).length;
+      const available = menuItems.filter(m => (m.stock || 0) > threshold).length;
+      
+      // Hitung total stok untuk display
+      const totalStock = menuItems.reduce((sum, m) => sum + (m.stock || 0), 0);
+      
+      return {
+        id: cat.id,
+        name: cat.name,
+        totalItems,
+        lowStock,
+        available,
+        totalStock,
+        threshold,
+        badge: getBadgeFromName(cat.name),
+        menuItems: menuItems.map(item => ({
+          id: item.id,
+          name: item.name,
+          stock: item.stock || 0,
+          status: item.status || 'Unknown',
+          price: item.price || 0,
+          estimatedTime: item.estimatedTime || '-'
+        }))
+      };
+    });
+
+    res.json(categoriesWithStats);
+  } catch (err) {
+    console.error('Error Database:', err.message);
+    // Return empty array on error instead of crashing
+    res.status(500).json({ error: 'Server Error pada Kategori: ' + err.message, categories: [] });
+  }
+});
+
 // GET semua menu items dengan kategori
 app.get('/api/menu', authenticateToken, async (req, res) => {
   try {
@@ -570,6 +635,255 @@ app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
 app.get('/', (req, res) => {
   res.send('Bima Resto Unified Backend API is Running...');
 });
+
+// ========== CHART / DASHBOARD DATA ENDPOINTS ==========
+
+// GET /api/dashboard/weekly-trend - Data for weekly usage graph
+app.get('/api/dashboard/weekly-trend', authenticateToken, async (req, res) => {
+  try {
+    // Get last 7 days of inventory movements
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    sevenDaysAgo.setHours(0, 0, 0, 0);
+
+    const movements = await prisma.inventoryMovement.findMany({
+      where: {
+        createdAt: {
+          gte: sevenDaysAgo
+        }
+      },
+      include: {
+        menuItem: {
+          select: { name: true }
+        }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // Group by day and type (IN/OUT)
+    const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+    const today = new Date();
+    
+    const weeklyData = days.map((dayLabel, index) => {
+      const date = new Date(today);
+      date.setDate(date.getDate() - (6 - index));
+      date.setHours(0, 0, 0, 0);
+      
+      const nextDate = new Date(date);
+      nextDate.setDate(nextDate.getDate() + 1);
+      
+      const dayMovements = movements.filter(m => {
+        const mDate = new Date(m.createdAt);
+        return mDate >= date && mDate < nextDate;
+      });
+
+      const masuk = dayMovements
+        .filter(m => m.movementType === 'IN' || m.quantityChange > 0)
+        .reduce((sum, m) => sum + Math.abs(m.quantityChange), 0);
+      
+      const keluar = dayMovements
+        .filter(m => m.movementType === 'OUT' || m.movementType === 'SALE' || m.quantityChange < 0)
+        .reduce((sum, m) => sum + Math.abs(m.quantityChange), 0);
+
+      return {
+        day: dayLabel,
+        masuk,
+        keluar,
+        total: dayMovements.length
+      };
+    });
+
+    res.json(weeklyData);
+  } catch (err) {
+    console.error('Weekly trend error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/dashboard/top-usage - Top materials by usage
+app.get('/api/dashboard/top-usage', authenticateToken, async (req, res) => {
+  try {
+    const movements = await prisma.inventoryMovement.findMany({
+      where: {
+        OR: [
+          { movementType: 'OUT' },
+          { movementType: 'SALE' },
+          { quantityChange: { lt: 0 } }
+        ]
+      },
+      include: {
+        menuItem: {
+          select: { name: true, stock: true }
+        }
+      }
+    });
+
+    // Group by menu item
+    const usageMap = new Map();
+    
+    movements.forEach(m => {
+      const name = m.menuItem?.name || 'Unknown';
+      const qty = Math.abs(m.quantityChange);
+      
+      if (!usageMap.has(name)) {
+        usageMap.set(name, { name, totalUsed: 0, count: 0 });
+      }
+      const current = usageMap.get(name);
+      current.totalUsed += qty;
+      current.count += 1;
+    });
+
+    const topUsage = Array.from(usageMap.values())
+      .sort((a, b) => b.totalUsed - a.totalUsed)
+      .slice(0, 5)
+      .map((item, index) => ({
+        rank: index + 1,
+        name: item.name,
+        amount: item.totalUsed,
+        unit: getUnitForItem(item.name),
+        percentage: 0 // Will be calculated on frontend
+      }));
+
+    // Calculate percentages
+    const maxAmount = topUsage[0]?.amount || 1;
+    topUsage.forEach(item => {
+      item.percentage = Math.round((item.amount / maxAmount) * 100);
+    });
+
+    res.json(topUsage);
+  } catch (err) {
+    console.error('Top usage error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/dashboard/stats - Enhanced dashboard stats
+app.get('/api/dashboard/stats', authenticateToken, async (req, res) => {
+  try {
+    const totalItems = await prisma.menuItem.count();
+    
+    // Count low stock items (stock <= threshold based on category)
+    const allItems = await prisma.menuItem.findMany({
+      include: { category: true }
+    });
+    
+    const lowStockItems = allItems.filter(item => {
+      const threshold = getLowStockThreshold(item.category?.name || '');
+      return item.stock <= threshold;
+    }).length;
+
+    // Calculate daily usage (today's OUT movements)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const todayMovements = await prisma.inventoryMovement.findMany({
+      where: {
+        createdAt: { gte: today },
+        OR: [
+          { movementType: 'OUT' },
+          { movementType: 'SALE' },
+          { quantityChange: { lt: 0 } }
+        ]
+      }
+    });
+
+    const dailyUsage = todayMovements.reduce((sum, m) => sum + Math.abs(m.quantityChange), 0);
+
+    // Total stock value
+    const stockValue = await prisma.menuItem.aggregate({
+      _sum: { stock: true }
+    });
+
+    res.json({
+      totalItems,
+      lowStockItems,
+      dailyUsage,
+      totalStock: stockValue._sum.stock || 0,
+      totalSuppliers: await prisma.supplier.count(),
+      totalTransactions: await prisma.supplierTransaction.count()
+    });
+  } catch (err) {
+    console.error('Dashboard stats error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/stock-reports/usage - Usage data for stock reports graph
+app.get('/api/stock-reports/usage', authenticateToken, async (req, res) => {
+  try {
+    const { period = 'week' } = req.query; // week, month, year
+    
+    let startDate = new Date();
+    
+    if (period === 'week') {
+      startDate.setDate(startDate.getDate() - 7);
+    } else if (period === 'month') {
+      startDate.setMonth(startDate.getMonth() - 1);
+    } else {
+      startDate.setFullYear(startDate.getFullYear() - 1);
+    }
+
+    const movements = await prisma.inventoryMovement.findMany({
+      where: {
+        createdAt: { gte: startDate }
+      },
+      include: {
+        menuItem: { select: { name: true } }
+      },
+      orderBy: { createdAt: 'asc' }
+    });
+
+    // Group by date for line chart
+    const dateMap = new Map();
+    
+    movements.forEach(m => {
+      const date = new Date(m.createdAt).toISOString().split('T')[0];
+      if (!dateMap.has(date)) {
+        dateMap.set(date, { date, masuk: 0, keluar: 0 });
+      }
+      const entry = dateMap.get(date);
+      if (m.movementType === 'IN' || m.quantityChange > 0) {
+        entry.masuk += Math.abs(m.quantityChange);
+      } else {
+        entry.keluar += Math.abs(m.quantityChange);
+      }
+    });
+
+    const usageData = Array.from(dateMap.values());
+    
+    // Also get summary
+    const totalMasuk = movements
+      .filter(m => m.movementType === 'IN' || m.quantityChange > 0)
+      .reduce((sum, m) => sum + Math.abs(m.quantityChange), 0);
+    
+    const totalKeluar = movements
+      .filter(m => m.movementType === 'OUT' || m.movementType === 'SALE' || m.quantityChange < 0)
+      .reduce((sum, m) => sum + Math.abs(m.quantityChange), 0);
+
+    res.json({
+      usageData,
+      summary: {
+        totalMasuk,
+        totalKeluar,
+        netChange: totalMasuk - totalKeluar,
+        totalLogs: movements.length
+      }
+    });
+  } catch (err) {
+    console.error('Stock reports usage error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Helper function for units
+function getUnitForItem(name) {
+  const n = name.toLowerCase();
+  if (n.includes('minyak') || n.includes('oil')) return 'Liter';
+  if (n.includes('telur') || n.includes('egg')) return 'Rak';
+  if (n.includes('beras') || n.includes('rice')) return 'kg';
+  if (n.includes('gula') || n.includes('sugar')) return 'kg';
+  return 'kg';
+}
 
 // Start server
 app.listen(PORT, () => {
