@@ -260,30 +260,71 @@ function getBadgeFromName(name) {
   return 'GENERAL';
 }
 
-// GET semua kategori + statistik item
+// Helper: tentukan low stock threshold berdasarkan nama kategori
+function getLowStockThreshold(name) {
+  const n = name.toLowerCase();
+  
+  // Makanan, Minuman, Dessert
+  if (n.includes('makanan')) return 10;
+  if (n.includes('minuman')) return 10;
+  if (n.includes('dessert')) return 10;
+  
+  // Fresh Ingredients
+  if (n.includes('meat')) return 10; // 10kg
+  if (n.includes('poultry')) return 5; // 5kg
+  if (n.includes('vegetable')) return 10; // 10kg
+  if (n.includes('fruit')) return 5; // 5kg
+  if (n.includes('seafood')) return 10; // 10kg
+  
+  // Dry Ingredients, Bottle, Pastry
+  if (n.includes('dry')) return 10; // 10kg
+  if (n.includes('bottle')) return 5; // 5 litres
+  if (n.includes('pastry')) return 10; // 10kg
+  
+  return 10; // default
+}
+
+// GET semua kategori + statistik item (dengan threshold dinamis)
 app.get('/api/kategori', authenticateToken, async (req, res) => {
   try {
     const categories = await prisma.category.findMany({
       orderBy: { id: 'asc' },
       include: {
         menuItems: {
-          select: { id: true, stock: true, status: true }
+          select: { 
+            id: true, 
+            name: true,
+            stock: true, 
+            status: true,
+            price: true,
+            estimatedTime: true
+          }
         }
       }
     });
 
-    // Hitung statistik per kategori
+    // Hitung statistik per kategori dengan threshold yang sesuai
     const categoriesWithStats = categories.map(cat => {
+      const threshold = getLowStockThreshold(cat.name);
       const totalItems = cat.menuItems.length;
-      const lowStock = cat.menuItems.filter(m => m.stock <= 5).length;
-      const available = cat.menuItems.filter(m => m.stock > 5).length;
+      
+      // Hitung low stock berdasarkan threshold per kategori
+      const lowStock = cat.menuItems.filter(m => m.stock <= threshold).length;
+      const available = cat.menuItems.filter(m => m.stock > threshold).length;
+      
+      // Hitung total stok untuk display
+      const totalStock = cat.menuItems.reduce((sum, m) => sum + m.stock, 0);
       
       return {
-        ...cat,
+        id: cat.id,
+        name: cat.name,
         totalItems,
         lowStock,
         available,
-        badge: getBadgeFromName(cat.name)
+        totalStock,
+        threshold, // kirim threshold ke frontend untuk referensi
+        badge: getBadgeFromName(cat.name),
+        menuItems: cat.menuItems // kirim detail items jika diperlukan
       };
     });
 
