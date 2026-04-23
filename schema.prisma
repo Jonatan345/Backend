@@ -7,88 +7,96 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum ItemType {
-  RAW           // Ingredients (Beef, Buns)
-  RETAIL        // Buy & Sell as-is (Soda)
-  MANUFACTURED  // Made from recipes (Burger)
+// ========== AUTHENTICATION ==========
+
+model User {
+  id              Int       @id @default(autoincrement())
+  username        String    @unique
+  email           String    @unique
+  password        String
+  role            String    @default("staff")   // admin, staff, manager
+  resetToken      String?
+  resetTokenExpiry DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@map("users")
 }
 
-model Item {
-  id          Int      @id @default(autoincrement())
-  name        String   @unique @db.VarChar(150)
-  type        ItemType
-  price       Decimal? @db.Decimal(10, 2) // Nullable because RAW items aren't sold
-  stock       Int      @default(0)
+// ========== CATEGORIES & MENU (Restaurant POS) ==========
+
+model Category {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique @db.VarChar(100)
+  createdAt DateTime   @default(now())
+  
+  menuItems MenuItem[]
+
+  @@map("categories")
+}
+
+model MenuItem {
+  id                Int                 @id @default(autoincrement())
+  categoryId        Int
+  category          Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name              String              @db.VarChar(150)
+  price             Decimal?            @db.Decimal(10, 2)
+  stock             Int                 @default(0)
+  estimatedTime     Int?                // cooking time in minutes
+  status            String              @default("active") // active, inactive, out_of_stock
+  createdAt         DateTime            @default(now())
   
   // Relations
-  orderItems        OrderItem[]
-  purchaseItems     PurchaseOrderItem[]
-  recipesWhereParent Recipe[] @relation("ParentItem")
-  recipesWhereChild  Recipe[] @relation("ChildItem")
+  inventoryMovements  InventoryMovement[]
+  supplierTransactions SupplierTransaction[]
 
-  @@map("items")
+  @@map("menu_items")
 }
 
-// THE BILL OF MATERIALS (The Missing Link)
-// This tells the database how to make a MANUFACTURED item
-model Recipe {
-  id              Int     @id @default(autoincrement())
-  parentItemId    Int     // The Burger
-  childItemId     Int     // The Beef Patty
-  quantityNeeded  Int     // How many patties per burger?
+// ========== INVENTORY TRACKING ==========
 
-  parentItem      Item    @relation("ParentItem", fields: [parentItemId], references: [id])
-  childItem       Item    @relation("ChildItem", fields: [childItemId], references: [id])
+model InventoryMovement {
+  id             Int      @id @default(autoincrement())
+  menuItemId     Int
+  menuItem       MenuItem @relation(fields: [menuItemId], references: [id])
+  quantityChange Int      // positive = stock in, negative = stock out
+  movementType   String   // 'purchase', 'sale', 'waste', 'adjustment', 'return'
+  reason         String?  @db.VarChar(255)
+  createdAt      DateTime @default(now())
 
-  @@unique([parentItemId, childItemId])
-  @@map("recipes")
+  @@map("inventory_movements")
 }
 
-// SELLING (Money In)
-model Order {
-  id          Int         @id @default(autoincrement())
-  totalAmount Decimal     @db.Decimal(10, 2)
-  status      String      @default("Pending") // Uncooked, Served, etc. goes HERE
-  createdAt   DateTime    @default(now())
+// ========== SUPPLIER MANAGEMENT ==========
+
+model Supplier {
+  id                Int                   @id @default(autoincrement())
+  name              String                @db.VarChar(100)
+  companyName       String?               @db.VarChar(100)
+  category          String?               @db.VarChar(50)   // what they supply
+  phone             String?               @db.VarChar(20)
+  email             String?               @db.VarChar(100)
+  address           String?               @db.Text
+  city              String?               @db.VarChar(50)
+  status            String                @default("Aktif") // Aktif, Nonaktif, Blacklist
+  createdAt         DateTime              @default(now())
   
-  items       OrderItem[]
+  transactions      SupplierTransaction[]
 
-  @@map("orders")
+  @@map("suppliers")
 }
 
-model OrderItem {
-  id        Int     @id @default(autoincrement())
-  orderId   Int
-  itemId    Int     // Must be RETAIL or MANUFACTURED
-  quantity  Int
-  price     Decimal @db.Decimal(10, 2) // Locked price at time of sale
+model SupplierTransaction {
+  id              Int      @id @default(autoincrement())
+  supplierId      Int
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+  menuItemId      Int?
+  menuItem        MenuItem? @relation(fields: [menuItemId], references: [id])
+  transactionType String   @db.VarChar(20) // 'purchase', 'return', 'payment'
+  quantity        Int?
+  amount          Decimal  @db.Decimal(10, 2)
+  status          String   @default("Pending") // Pending, Completed, Cancelled
+  notes           String?  @db.Text
+  transactionDate DateTime @default(now())
 
-  order     Order   @relation(fields: [orderId], references: [id])
-  item      Item    @relation(fields: [itemId], references: [id])
-
-  @@map("order_items")
-}
-
-// BUYING (Money Out & Inventory In)
-model PurchaseOrder {
-  id          Int                 @id @default(autoincrement())
-  supplierId  Int
-  createdAt   DateTime            @default(now())
-  
-  items       PurchaseOrderItem[]
-
-  @@map("purchase_orders")
-}
-
-model PurchaseOrderItem {
-  id               Int           @id @default(autoincrement())
-  purchaseOrderId  Int
-  itemId           Int           // Must be RAW or RETAIL
-  quantity         Int
-  cost             Decimal       @db.Decimal(10, 2)
-
-  purchaseOrder    PurchaseOrder @relation(fields: [purchaseOrderId], references: [id])
-  item             Item          @relation(fields: [itemId], references: [id])
-
-  @@map("purchase_order_items")
+  @@map("supplier_transactions")
 }
