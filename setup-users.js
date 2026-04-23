@@ -1,55 +1,49 @@
-const { Client } = require('pg');
+const { PrismaClient } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
-require('dotenv').config();
 
-const client = new Client({
-  connectionString: process.env.DATABASE_URL,
-});
+const prisma = new PrismaClient();
 
-async function createUsersTable() {
-  try {
-    await client.connect();
-    console.log('Connected to database');
+async function setupUsers() {
+  const users = [
+    { username: 'admin', password: 'admin123', name: 'Admin', role: 'Admin' },
+    { username: 'manager', password: 'manager123', name: 'Manager', role: 'Manager' },
+    { username: 'staff', password: 'staff123', name: 'Staff', role: 'Staff' },
+  ];
 
-    // Create users table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) NOT NULL UNIQUE,
-        email VARCHAR(100) NOT NULL UNIQUE,
-        password VARCHAR(255) NOT NULL,
-        role VARCHAR(20) DEFAULT 'staff',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    console.log('Users table created');
-
-    // Insert sample users with bcrypt hashed passwords
-    const adminHash = await bcrypt.hash('admin123', 10);
-    const managerHash = await bcrypt.hash('manager123', 10);
-    const staffHash = await bcrypt.hash('staff123', 10);
-
-    await client.query(`
-      INSERT INTO users (username, email, password, role) VALUES
-      ('admin', 'admin@bimaresto.com', $1, 'admin'),
-      ('manager', 'manager@bimaresto.com', $2, 'manager'),
-      ('staff', 'staff@bimaresto.com', $3, 'staff')
-      ON CONFLICT (username) DO NOTHING;
-    `, [adminHash, managerHash, staffHash]);
-
-    console.log('Users inserted successfully!');
-    console.log('Demo credentials:');
-    console.log('Admin: admin / admin123');
-    console.log('Manager: manager / manager123');
-    console.log('Staff: staff / staff123');
-
-  } catch (error) {
-    console.error('Error:', error);
-  } finally {
-    await client.end();
+  for (const userData of users) {
+    // Hash password properly
+    const hashedPassword = await bcrypt.hash(userData.password, 10);
+    
+    await prisma.user.upsert({
+      where: { username: userData.username },
+      update: {
+        password: hashedPassword,
+        name: userData.name,
+        role: userData.role,
+      },
+      create: {
+        username: userData.username,
+        password: hashedPassword,
+        name: userData.name,
+        role: userData.role,
+      },
+    });
+    
+    console.log(`✅ User ${userData.username} created/updated`);
   }
+
+  console.log('\n🎉 All users setup complete!');
+  console.log('Login credentials:');
+  console.log('  admin / admin123');
+  console.log('  manager / manager123');
+  console.log('  staff / staff123');
 }
 
-createUsersTable();
+setupUsers()
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
