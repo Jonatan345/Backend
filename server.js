@@ -6,13 +6,7 @@ const jwt = require('jsonwebtoken');
 
 // ─── Prisma Setup ─────────────────────────────────────────────
 const { PrismaClient } = require('@prisma/client');
-const { PrismaNeon } = require('@prisma/adapter-neon');
-const { Pool } = require('@neondatabase/serverless');
-
-const connectionString = process.env.DATABASE_URL;
-const pool = new Pool({ connectionString });
-const adapter = new PrismaNeon(pool);
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient();
 
 // ─── Express Setup ────────────────────────────────────────────
 const app = express();
@@ -47,27 +41,34 @@ const authenticateToken = (req, res, next) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log('🔑 Login attempt:', username);
+    console.log('🔑 Login attempt for:', username);
 
-    if (!username || !password)
+    if (!username || !password) {
       return res.status(400).json({ message: 'Username and password required' });
+    }
 
-    const user = await prisma.user.findUnique({ where: { username } });
-    console.log('👤 User found:', user ? user.username : 'NOT FOUND');
+    const user = await prisma.user.findUnique({
+      where: { username }
+    });
 
-    if (!user)
+    console.log('👤 User lookup result:', user ? 'FOUND' : 'NOT FOUND');
+
+    if (!user) {
       return res.status(401).json({ message: 'Invalid username or password' });
+    }
 
     let isValidPassword = false;
     try {
       isValidPassword = await bcrypt.compare(password, user.password);
-    } catch {
+      console.log('🔐 bcrypt compare result:', isValidPassword);
+    } catch (e) {
       isValidPassword = (password === user.password);
+      console.log('🔐 Plain text fallback used');
     }
 
-    console.log('🔐 Password valid:', isValidPassword);
-    if (!isValidPassword)
+    if (!isValidPassword) {
       return res.status(401).json({ message: 'Invalid username or password' });
+    }
 
     const token = jwt.sign(
       { userId: user.id, username: user.username, role: user.role },
@@ -75,18 +76,29 @@ app.post('/api/auth/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    console.log('✅ Login successful for:', username);
+
     res.json({
       token,
-      user: { id: user.id, username: user.username, name: user.username, role: user.role }
+      user: {
+        id: user.id,
+        username: user.username,
+        name: user.username,
+        role: user.role
+      }
     });
+
   } catch (error) {
-    console.error('❌ Login error:', error);
-    res.status(500).json({ message: 'Server error during login' });
+    console.error('❌ LOGIN ERROR:', error);
+    console.error('Stack:', error.stack);
+    res.status(500).json({
+      message: 'Server error during login',
+      error: error.message
+    });
   }
 });
 
 // ─── SEED USERS ───────────────────────────────────────────────
-// User model requires: username (unique), email (unique), password, role
 app.post('/api/seed-users', async (req, res) => {
   try {
     const users = [
@@ -189,12 +201,10 @@ app.delete('/api/kategori/:id', authenticateToken, async (req, res) => {
 // INVENTORY → model: MenuItem  (table: menu_items)
 // ═══════════════════════════════════════════════════════════════
 
-// Dashboard summary stats
 app.get('/api/inventory/summary', authenticateToken, async (req, res) => {
   try {
     const allItems = await prisma.menuItem.findMany();
     const totalItems = allItems.length;
-    // "Hampir habis" = stock at or below 10 units
     const lowStockItems = allItems.filter(i => i.stock <= 10).length;
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -212,7 +222,6 @@ app.get('/api/inventory/summary', authenticateToken, async (req, res) => {
   }
 });
 
-// 7-day usage trend for dashboard chart
 app.get('/api/inventory/weekly-trend', authenticateToken, async (req, res) => {
   try {
     const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
@@ -239,7 +248,6 @@ app.get('/api/inventory/weekly-trend', authenticateToken, async (req, res) => {
   }
 });
 
-// Top 5 most used items for dashboard
 app.get('/api/inventory/top-used', authenticateToken, async (req, res) => {
   try {
     const movements = await prisma.inventoryMovement.findMany({
@@ -263,7 +271,6 @@ app.get('/api/inventory/top-used', authenticateToken, async (req, res) => {
   }
 });
 
-// Get all inventory items
 app.get('/api/inventory', authenticateToken, async (req, res) => {
   try {
     const { search, categoryId, status } = req.query;
@@ -285,7 +292,6 @@ app.get('/api/inventory', authenticateToken, async (req, res) => {
   }
 });
 
-// Create inventory item
 app.post('/api/inventory', authenticateToken, async (req, res) => {
   try {
     const { name, categoryId, price, stock, estimatedTime, status } = req.body;
@@ -305,8 +311,8 @@ app.post('/api/inventory', authenticateToken, async (req, res) => {
 
     if (item.stock > 0) {
       await prisma.inventoryMovement.create({
-        data: { menuItemId: item.id, quantityChange: item.stock, movementType: 'purchase', reason: `Initial stock - ${item.name}` }
-      });
+  data: { menuItemId: item.id, quantityChange: item.stock, movementType: 'IN', reason: `Initial stock - ${item.name}` }
+});
     }
 
     res.status(201).json(item);
@@ -316,7 +322,6 @@ app.post('/api/inventory', authenticateToken, async (req, res) => {
   }
 });
 
-// Update inventory item
 app.put('/api/inventory/:id', authenticateToken, async (req, res) => {
   try {
     const { name, categoryId, price, stock, estimatedTime, status } = req.body;
@@ -339,7 +344,6 @@ app.put('/api/inventory/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete inventory item
 app.delete('/api/inventory/:id', authenticateToken, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -354,13 +358,9 @@ app.delete('/api/inventory/:id', authenticateToken, async (req, res) => {
 });
 
 // ═══════════════════════════════════════════════════════════════
-// INVENTORY MOVEMENTS → model: InventoryMovement (table: inventory_movements)
-// quantityChange > 0 = masuk (purchase/return)
-// quantityChange < 0 = keluar (sale/waste/adjustment)
-// movementType: 'purchase' | 'sale' | 'waste' | 'adjustment' | 'return'
+// INVENTORY MOVEMENTS
 // ═══════════════════════════════════════════════════════════════
 
-// Get movements log with filters
 app.get('/api/inventory/movements', authenticateToken, async (req, res) => {
   try {
     const { startDate, endDate, type, itemId } = req.query;
@@ -369,7 +369,6 @@ app.get('/api/inventory/movements', authenticateToken, async (req, res) => {
     if (itemId) where.menuItemId = parseInt(itemId);
     if (type === 'masuk')  where.quantityChange = { gt: 0 };
     if (type === 'keluar') where.quantityChange = { lt: 0 };
-    // Pass raw movementType values directly (purchase, sale, waste, etc.)
     if (type && !['masuk', 'keluar', 'semua'].includes(type)) where.movementType = type;
 
     if (startDate || endDate) {
@@ -384,14 +383,13 @@ app.get('/api/inventory/movements', authenticateToken, async (req, res) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Normalize for frontend consistency
     const normalized = movements.map(m => ({
       ...m,
       itemName: m.menuItem?.name || 'Unknown',
       categoryName: m.menuItem?.category?.name || '-',
       type: m.quantityChange > 0 ? 'masuk' : 'keluar',
       quantity: Math.abs(m.quantityChange),
-      unit: m.menuItem?.stock !== undefined ? 'unit' : '',
+      unit: 'unit',
       notes: m.reason || ''
     }));
 
@@ -402,7 +400,41 @@ app.get('/api/inventory/movements', authenticateToken, async (req, res) => {
   }
 });
 
-// Record stock movement (in or out)
+// Also expose /api/inventory/logs for StockReportsPage compatibility
+app.get('/api/inventory/logs', authenticateToken, async (req, res) => {
+  try {
+    const { startDate, limit } = req.query;
+    const where = {};
+
+    if (startDate) {
+      const s = new Date(startDate);
+      where.createdAt = { gte: s };
+    }
+
+    const movements = await prisma.inventoryMovement.findMany({
+      where,
+      include: { menuItem: { include: { category: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit ? parseInt(limit) : 200
+    });
+
+    const normalized = movements.map(m => ({
+      id: m.id,
+      createdAt: m.createdAt,
+      itemName: m.menuItem?.name || 'Unknown',
+      quantity: Math.abs(m.quantityChange),
+      type: m.quantityChange > 0 ? 'MASUK' : 'KELUAR',
+      note: m.reason || '',
+      unit: 'unit'
+    }));
+
+    res.json(normalized);
+  } catch (error) {
+    console.error('❌ Get logs error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.post('/api/inventory/movements', authenticateToken, async (req, res) => {
   try {
     const { menuItemId, type, quantity, movementType, reason } = req.body;
@@ -420,7 +452,7 @@ app.post('/api/inventory/movements', authenticateToken, async (req, res) => {
       return res.status(400).json({ message: `Insufficient stock. Available: ${item.stock}` });
 
     const quantityChange = type === 'masuk' ? qty : -qty;
-    const resolvedMovementType = movementType || (type === 'masuk' ? 'purchase' : 'sale');
+    const resolvedMovementType = movementType || (type === 'masuk' ? 'IN' : 'OUT');
 
     await prisma.menuItem.update({
       where: { id: parseInt(menuItemId) },
@@ -428,7 +460,13 @@ app.post('/api/inventory/movements', authenticateToken, async (req, res) => {
     });
 
     const movement = await prisma.inventoryMovement.create({
-      data: { menuItemId: parseInt(menuItemId), quantityChange, movementType: resolvedMovementType, reason: reason || null },
+      data: {
+        menuItemId: parseInt(menuItemId),
+        quantityChange,
+        movementType: resolvedMovementType,
+        reason: reason || null,
+        ...(req.body.createdAt ? { createdAt: new Date(req.body.createdAt) } : {})
+      },
       include: { menuItem: { include: { category: true } } }
     });
 
@@ -439,7 +477,6 @@ app.post('/api/inventory/movements', authenticateToken, async (req, res) => {
   }
 });
 
-// Summary stats for Stock Reports page
 app.get('/api/inventory/movements/summary', authenticateToken, async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
@@ -469,7 +506,24 @@ app.get('/api/inventory/movements/summary', authenticateToken, async (req, res) 
 });
 
 // ═══════════════════════════════════════════════════════════════
-// SUPPLIER ROUTES → model: Supplier + SupplierTransaction
+// MENU ROUTES (alias for inventory, used by CategorySection)
+// ═══════════════════════════════════════════════════════════════
+
+app.get('/api/menu', authenticateToken, async (req, res) => {
+  try {
+    const items = await prisma.menuItem.findMany({
+      include: { category: true },
+      orderBy: { name: 'asc' }
+    });
+    res.json(items);
+  } catch (error) {
+    console.error('❌ Get menu error:', error);
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// SUPPLIER ROUTES
 // ═══════════════════════════════════════════════════════════════
 
 app.get('/api/supplier', authenticateToken, async (req, res) => {
@@ -526,25 +580,28 @@ app.listen(PORT, () => {
   console.log(`\n🚀 Server running on http://localhost:${PORT}`);
   console.log(`\n── Auth ──────────────────────────────────────────`);
   console.log(`  POST   /api/auth/login`);
-  console.log(`  POST   /api/seed-users       ← run this first!`);
+  console.log(`  POST   /api/seed-users`);
   console.log(`  GET    /api/check-users`);
-  console.log(`\n── Inventory (MenuItem model) ────────────────────`);
+  console.log(`\n── Inventory ─────────────────────────────────────`);
   console.log(`  GET    /api/inventory`);
   console.log(`  GET    /api/inventory/summary`);
   console.log(`  GET    /api/inventory/weekly-trend`);
   console.log(`  GET    /api/inventory/top-used`);
+  console.log(`  GET    /api/inventory/logs`);
   console.log(`  POST   /api/inventory`);
   console.log(`  PUT    /api/inventory/:id`);
   console.log(`  DELETE /api/inventory/:id`);
-  console.log(`\n── Movements (InventoryMovement model) ──────────`);
+  console.log(`\n── Movements ─────────────────────────────────────`);
   console.log(`  GET    /api/inventory/movements`);
   console.log(`  GET    /api/inventory/movements/summary`);
   console.log(`  POST   /api/inventory/movements`);
-  console.log(`\n── Kategori (Category model) ─────────────────────`);
+  console.log(`\n── Kategori ──────────────────────────────────────`);
   console.log(`  GET    /api/kategori`);
   console.log(`  POST   /api/kategori`);
   console.log(`  PUT    /api/kategori/:id`);
   console.log(`  DELETE /api/kategori/:id`);
+  console.log(`\n── Menu ──────────────────────────────────────────`);
+  console.log(`  GET    /api/menu`);
   console.log(`\n── Supplier ──────────────────────────────────────`);
   console.log(`  GET    /api/supplier`);
   console.log(`  POST   /api/supplier`);
