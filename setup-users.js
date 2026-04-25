@@ -1,49 +1,63 @@
 const { PrismaClient } = require('@prisma/client');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 
 const prisma = new PrismaClient();
 
+const users = [
+  {
+    username: 'admin',
+    name: 'Admin',
+    email: 'admin@bimaresto.com',
+    password: 'admin123',
+    role: 'admin',
+  },
+  {
+    username: 'manager',
+    name: 'Manager',
+    email: 'manager@bimaresto.com',
+    password: 'manager123',
+    role: 'manager',
+  },
+  {
+    username: 'staff',
+    name: 'Staff',
+    email: 'staff@bimaresto.com',
+    password: 'staff123',
+    role: 'staff',
+  },
+];
+
 async function setupUsers() {
-  const users = [
-    { username: 'admin', password: 'admin123', name: 'Admin', role: 'Admin' },
-    { username: 'manager', password: 'manager123', name: 'Manager', role: 'Manager' },
-    { username: 'staff', password: 'staff123', name: 'Staff', role: 'Staff' },
-  ];
+  console.log('🔧 Setting up users...\n');
 
   for (const userData of users) {
-    // Hash password properly
-    const hashedPassword = await bcrypt.hash(userData.password, 10);
-    
-    await prisma.user.upsert({
-      where: { username: userData.username },
-      update: {
-        password: hashedPassword,
-        name: userData.name,
-        role: userData.role,
-      },
-      create: {
-        username: userData.username,
-        password: hashedPassword,
-        name: userData.name,
-        role: userData.role,
-      },
-    });
-    
-    console.log(`✅ User ${userData.username} created/updated`);
+    try {
+      const hashedPassword = await bcrypt.hash(userData.password, 10);
+
+      const user = await prisma.user.upsert({
+        where: { username: userData.username },
+        update: {
+          name: userData.name,
+          email: userData.email,
+          password: hashedPassword,
+          role: userData.role,
+        },
+        create: {
+          username: userData.username,
+          name: userData.name,
+          email: userData.email,
+          password: hashedPassword,
+          role: userData.role,
+        },
+      });
+
+      console.log(`✅ User "${user.username}" upserted successfully`);
+    } catch (err) {
+      console.error(`❌ Error creating ${userData.username}:`, err.message);
+    }
   }
 
-  console.log('\n🎉 All users setup complete!');
-  console.log('Login credentials:');
-  console.log('  admin / admin123');
-  console.log('  manager / manager123');
-  console.log('  staff / staff123');
+  console.log('\n✅ Done! Run check-users.js to verify.');
 }
 
-setupUsers()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+setupUsers().finally(() => prisma.$disconnect());
