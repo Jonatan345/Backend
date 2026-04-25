@@ -145,6 +145,14 @@ INSERT INTO inventory_movements (menu_item_id, quantity_change, movement_type, r
 (16, 20, 'IN', 'Initial stock - Minyak Goreng'),
 (17, 30, 'IN', 'Initial stock - Croissant');
 
+-- Insert some sample OUT movements
+INSERT INTO inventory_movements (menu_item_id, quantity_change, movement_type, reason)
+VALUES 
+(1, -10, 'OUT', 'Terjual hari ini'),
+(2, -15, 'OUT', 'Terjual hari ini'),
+(9, -20, 'OUT', 'Terjual hari ini'),
+(13, -30, 'OUT', 'Terjual hari ini');
+
 INSERT INTO suppliers (name, company_name, category, phone, email, address, city, status) VALUES
 ('Budi', 'PT Sumber Makmur', 'Sayuran & Buah', '0812-3456-7890', 'budi@sumbermakmur.co.id', 'Jl. Industri No. 45', 'Bandung', 'Aktif'),
 ('Eko', 'CV Berkah Abadi', 'Daging & Seafood', '0856-6878-5432', 'eko@berkah.com', 'Jl. Merdeka No. 78', 'Jakarta', 'Aktif'),
