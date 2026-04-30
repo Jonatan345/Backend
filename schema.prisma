@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========== AUTHENTICATION ==========
+
+model User {
+  id              Int       @id @default(autoincrement())
+  username        String    @unique
+  email           String    @unique
+  password        String
+  role            String    @default("staff")   // admin, staff, manager
+  resetToken      String?
+  resetTokenExpiry DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@map("users")
+}
+
+// ========== CATEGORIES & MENU (Restaurant POS) ==========
+
+model Category {
+  id        Int        @id @default(autoincrement())
+  name      String     @unique @db.VarChar(100)
+  createdAt DateTime   @default(now())
+  
+  menuItems MenuItem[]
+
+  @@map("categories")
+}
+
+model MenuItem {
+  id                Int                 @id @default(autoincrement())
+  categoryId        Int
+  category          Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name              String              @db.VarChar(150)
+  price             Decimal?            @db.Decimal(10, 2)
+  stock             Int                 @default(0)
+  estimatedTime     Int?                // cooking time in minutes
+  status            String              @default("active") // active, inactive, out_of_stock
+  createdAt         DateTime            @default(now())
+  
+  // Relations
+  inventoryMovements  InventoryMovement[]
+  supplierTransactions SupplierTransaction[]
+
+  @@map("menu_items")
+}
+
+// ========== INVENTORY TRACKING ==========
+
+model InventoryMovement {
+  id             Int      @id @default(autoincrement())
+  menuItemId     Int
+  menuItem       MenuItem @relation(fields: [menuItemId], references: [id])
+  quantityChange Int      // positive = stock in, negative = stock out
+  movementType   String   // 'purchase', 'sale', 'waste', 'adjustment', 'return'
+  reason         String?  @db.VarChar(255)
+  createdAt      DateTime @default(now())
+
+  @@map("inventory_movements")
+}
+
+// ========== SUPPLIER MANAGEMENT ==========
+
+model Supplier {
+  id                Int                   @id @default(autoincrement())
+  name              String                @db.VarChar(100)
+  companyName       String?               @db.VarChar(100)
+  category          String?               @db.VarChar(50)   // what they supply
+  phone             String?               @db.VarChar(20)
+  email             String?               @db.VarChar(100)
+  address           String?               @db.Text
+  city              String?               @db.VarChar(50)
+  status            String                @default("Aktif") // Aktif, Nonaktif, Blacklist
+  createdAt         DateTime              @default(now())
+  
+  transactions      SupplierTransaction[]
+
+  @@map("suppliers")
+}
+
+model SupplierTransaction {
+  id              Int      @id @default(autoincrement())
+  supplierId      Int
+  supplier        Supplier @relation(fields: [supplierId], references: [id])
+  menuItemId      Int?
+  menuItem        MenuItem? @relation(fields: [menuItemId], references: [id])
+  transactionType String   @db.VarChar(20) // 'purchase', 'return', 'payment'
+  quantity        Int?
+  amount          Decimal  @db.Decimal(10, 2)
+  status          String   @default("Pending") // Pending, Completed, Cancelled
+  notes           String?  @db.Text
+  transactionDate DateTime @default(now())
+
+  @@map("supplier_transactions")
+}
