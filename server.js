@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { validateLoginDto } = require("./dto/auth.dto");
 
 // ─── Prisma Setup ─────────────────────────────────────────────
 const { PrismaClient } = require('@prisma/client');
@@ -37,6 +38,13 @@ const authenticateToken = (req, res, next) => {
 // ═══════════════════════════════════════════════════════════════
 // AUTH ROUTES
 // ═══════════════════════════════════════════════════════════════
+
+// Contoh di route login
+app.post("/api/auth/login", (req, res) => {
+  const { valid, errors } = validateLoginDto(req.body);
+  if (!valid) return res.status(400).json({ errors });
+  // lanjut logic...
+});
 
 app.post('/api/auth/login', async (req, res) => {
   try {
