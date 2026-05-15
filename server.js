@@ -39,13 +39,6 @@ const authenticateToken = (req, res, next) => {
 // AUTH ROUTES
 // ═══════════════════════════════════════════════════════════════
 
-// Contoh di route login
-app.post("/api/auth/login", (req, res) => {
-  const { valid, errors } = validateLoginDto(req.body);
-  if (!valid) return res.status(400).json({ errors });
-  // lanjut logic...
-});
-
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
