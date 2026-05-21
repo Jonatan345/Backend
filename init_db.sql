@@ -86,10 +86,7 @@ CREATE TABLE supplier_transactions (
 );
 
 -- 5. Insert Sample Data - Users
-INSERT INTO users (username, email, password, role) VALUES
-('admin', 'admin@bimaresto.com', '$2b$10$8K3.5Q8X9Y2Z4W6E8R0T2U4I6O8P0A2S4D6F8G0H2J4K6L8N0P2R', 'admin'),
-('manager', 'manager@bimaresto.com', '$2b$10$8K3.5Q8X9Y2Z4W6E8R0T2U4I6O8P0A2S4D6F8G0H2J4K6L8N0P2R', 'manager'),
-('staff', 'staff@bimaresto.com', '$2b$10$8K3.5Q8X9Y2Z4W6E8R0T2U4I6O8P0A2S4D6F8G0H2J4K6L8N0P2R', 'staff');
+-- ⚠️ Users TIDAK diinsert di sini. Gunakan endpoint seed-users untuk hashing yang proper!
 
 -- 6. Insert Sample Data - Categories
 INSERT INTO categories (name) VALUES
