@@ -27,7 +27,7 @@ model User {
 model Category {
   id        Int        @id @default(autoincrement())
   name      String     @unique @db.VarChar(100)
-  createdAt DateTime   @default(now())
+  createdAt DateTime   @default(now()) @map("created_at")
   
   menuItems MenuItem[]
 
@@ -35,15 +35,15 @@ model Category {
 }
 
 model MenuItem {
-  id                Int                 @id @default(autoincrement())
-  categoryId        Int
-  category          Category            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  name              String              @db.VarChar(150)
-  price             Decimal?            @db.Decimal(10, 2)
-  stock             Int                 @default(0)
-  estimatedTime     Int?                // cooking time in minutes
-  status            String              @default("active") // active, inactive, out_of_stock
-  createdAt         DateTime            @default(now())
+  id                 Int       @id @default(autoincrement())
+  categoryId         Int       @map("category_id")
+  category           Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  name               String    @db.VarChar(150)
+  price              Decimal?  @db.Decimal(10, 2)
+  stock              Int       @default(0)
+  estimatedTime      Int?      @map("estimated_time") // cooking time in minutes
+  status             String    @default("active") // active, inactive, out_of_stock
+  createdAt          DateTime  @default(now()) @map("created_at")
   
   // Relations
   inventoryMovements  InventoryMovement[]
@@ -55,13 +55,13 @@ model MenuItem {
 // ========== INVENTORY TRACKING ==========
 
 model InventoryMovement {
-  id             Int      @id @default(autoincrement())
-  menuItemId     Int
-  menuItem       MenuItem @relation(fields: [menuItemId], references: [id])
-  quantityChange Int      // positive = stock in, negative = stock out
-  movementType   String   // 'purchase', 'sale', 'waste', 'adjustment', 'return'
-  reason         String?  @db.VarChar(255)
-  createdAt      DateTime @default(now())
+  id             Int       @id @default(autoincrement())
+  menuItemId     Int       @map("menu_item_id")
+  menuItem       MenuItem  @relation(fields: [menuItemId], references: [id])
+  quantityChange Int       @map("quantity_change") // positive = stock in, negative = stock out
+  movementType   String    @map("movement_type")   // 'purchase', 'sale', 'waste', 'adjustment', 'return'
+  reason         String?   @db.VarChar(255)
+  createdAt      DateTime  @default(now()) @map("created_at")
 
   @@map("inventory_movements")
 }
@@ -69,34 +69,34 @@ model InventoryMovement {
 // ========== SUPPLIER MANAGEMENT ==========
 
 model Supplier {
-  id                Int                   @id @default(autoincrement())
-  name              String                @db.VarChar(100)
-  companyName       String?               @db.VarChar(100)
-  category          String?               @db.VarChar(50)   // what they supply
-  phone             String?               @db.VarChar(20)
-  email             String?               @db.VarChar(100)
-  address           String?               @db.Text
-  city              String?               @db.VarChar(50)
-  status            String                @default("Aktif") // Aktif, Nonaktif, Blacklist
-  createdAt         DateTime              @default(now())
+  id           Int       @id @default(autoincrement())
+  name         String    @db.VarChar(100)
+  companyName  String?   @map("company_name") @db.VarChar(100)
+  category     String?   @db.VarChar(50)   // what they supply
+  phone        String?   @db.VarChar(20)
+  email        String?   @db.VarChar(100)
+  address      String?   @db.Text
+  city         String?   @db.VarChar(50)
+  status       String    @default("Aktif") // Aktif, Nonaktif, Blacklist
+  createdAt    DateTime  @default(now()) @map("created_at")
   
-  transactions      SupplierTransaction[]
+  transactions SupplierTransaction[]
 
   @@map("suppliers")
 }
 
 model SupplierTransaction {
-  id              Int      @id @default(autoincrement())
-  supplierId      Int
-  supplier        Supplier @relation(fields: [supplierId], references: [id])
-  menuItemId      Int?
+  id              Int       @id @default(autoincrement())
+  supplierId      Int       @map("supplier_id")
+  supplier        Supplier  @relation(fields: [supplierId], references: [id])
+  menuItemId      Int?      @map("menu_item_id")
   menuItem        MenuItem? @relation(fields: [menuItemId], references: [id])
-  transactionType String   @db.VarChar(20) // 'purchase', 'return', 'payment'
+  transactionType String    @map("transaction_type") @db.VarChar(20) // 'purchase', 'return', 'payment'
   quantity        Int?
-  amount          Decimal  @db.Decimal(10, 2)
-  status          String   @default("Pending") // Pending, Completed, Cancelled
-  notes           String?  @db.Text
-  transactionDate DateTime @default(now())
+  amount          Decimal   @db.Decimal(10, 2)
+  status          String    @default("Pending") // Pending, Completed, Cancelled
+  notes           String?   @db.Text
+  transactionDate DateTime  @default(now()) @map("transaction_date")
 
   @@map("supplier_transactions")
 }
