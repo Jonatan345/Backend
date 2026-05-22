@@ -10,14 +10,14 @@ datasource db {
 // ========== AUTHENTICATION ==========
 
 model User {
-  id              Int       @id @default(autoincrement())
-  username        String    @unique
-  email           String    @unique
-  password        String
-  role            String    @default("staff")   // admin, staff, manager
-  resetToken      String?
-  resetTokenExpiry DateTime?
-  createdAt       DateTime  @default(now())
+  id               Int       @id @default(autoincrement())
+  username         String    @unique
+  email            String    @unique
+  password         String
+  role             String    @default("staff")   // admin, staff, manager
+  resetToken       String?   @map("reset_token")
+  resetTokenExpiry DateTime? @map("reset_token_expiry")
+  createdAt        DateTime  @default(now()) @map("created_at")
 
   @@map("users")
 }
