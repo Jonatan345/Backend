@@ -1,14 +1,22 @@
 // dto/auth.dto.js
 
 function validateLoginDto(body) {
-  const { email, password } = body;
+  // 1. Ubah destructuring dari 'email' menjadi 'username'
+  const { username, password } = body; 
   const errors = [];
 
-  if (!email || typeof email !== "string") errors.push("email is required");
-  else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("email invalid");
+  // 2. Validasi teks biasa, bukan REGEX email lagi
+  if (!username || typeof username !== "string") {
+    errors.push("username is required");
+  } else if (username.length < 3) {
+    errors.push("username min 3 chars");
+  }
 
-  if (!password || typeof password !== "string") errors.push("password is required");
-  else if (password.length < 6) errors.push("password min 6 chars");
+  if (!password || typeof password !== "string") {
+    errors.push("password is required");
+  } else if (password.length < 6) {
+    errors.push("password min 6 chars");
+  }
 
   return { valid: errors.length === 0, errors };
 }
