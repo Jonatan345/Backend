@@ -41,6 +41,19 @@ const authenticateToken = (req, res, next) => {
 
 app.post('/api/auth/login', async (req, res) => {
   try {
+    // 1. --- INTEGRASI DTO DIMULAI DI SINI ---
+    // Memanggil fungsi validasi DTO dari auth.dto.js
+    const validationResult = validateLoginDto(req.body);
+    
+    // Jika tidak lolos validasi DTO, tolak request sebelum menyentuh database
+    if (!validationResult.valid) {
+      return res.status(400).json({ 
+        message: validationResult.message || "Format data login tidak sesuai standar" 
+      });
+    }
+
+    // --- INTEGRASI DTO SELESAI ---
+
     const { username, password } = req.body;
     console.log('🔑 Login attempt for:', username);
 
@@ -577,6 +590,7 @@ app.delete('/api/supplier/:id', authenticateToken, async (req, res) => {
 });
 
 // ─── START SERVER ─────────────────────────────────────────────
+// if (process.env.NODE_ENV !== 'test') {
 app.listen(PORT, () => {
   console.log(`\n🚀 Server running on http://localhost:${PORT}`);
   console.log(`\n── Auth ──────────────────────────────────────────`);
@@ -609,3 +623,6 @@ app.listen(PORT, () => {
   console.log(`  PUT    /api/supplier/:id`);
   console.log(`  DELETE /api/supplier/:id`);
 });
+// } 
+
+// module.exports = app;

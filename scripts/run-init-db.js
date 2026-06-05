@@ -40,4 +40,3 @@ async function initDb() {
 }
 
 initDb().catch(console.error);
-
